@@ -4,8 +4,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include "server.h"
-
-#define PORT 8081
+#include "common.h"
 
 int main() {
     int server_fd = create_server_socket(PORT);
@@ -13,10 +12,17 @@ int main() {
         return 1;
     }
 
+    int discovery_fd = create_discovery_socket(DISCOVERY_PORT);
+    if (discovery_fd == -1) {
+        close(server_fd);
+        return 1;
+    }
+
     fd_set master;
     FD_ZERO(&master);
     FD_SET(server_fd, &master);
-    int max_fd = server_fd;
+    FD_SET(discovery_fd, &master);
+    int max_fd = server_fd > discovery_fd ? server_fd : discovery_fd;
 
     while (1) {
         fd_set read_fds = master;
@@ -31,7 +37,9 @@ int main() {
                 continue;
             }
 
-            if (fd == server_fd) {
+            if (fd == discovery_fd) {
+                handle_discovery(discovery_fd);
+            } else if (fd == server_fd) {
                 struct sockaddr_in client_sockaddr_in;
                 socklen_t len = sizeof(client_sockaddr_in);
 
@@ -54,6 +62,7 @@ int main() {
         }
     }
 
+    close(discovery_fd);
     close(server_fd);
     return 0;
 }
